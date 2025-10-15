@@ -18,6 +18,7 @@ from utilities.email_manager import EmailManager
 from utilities.contact_manager import ContactManager
 from utilities.email_reader import EmailReader
 from system.system_commands import SystemCommands
+from security.voice_biometrics import VoiceBiometrics  # NEW IMPORT
 
 
 class FridayAssistant:
@@ -38,6 +39,9 @@ class FridayAssistant:
         self.email_manager = EmailManager()
         self.contact_manager = ContactManager()
         
+        # NEW: Voice Biometrics
+        self.voice_biometrics = VoiceBiometrics()
+        
         # Conversation state
         self.conversation_state = {
             'active': False,
@@ -48,7 +52,10 @@ class FridayAssistant:
     
     def greet_user(self):
         greeting = self.system_commands.get_greeting()
-        self.tts.speak(greeting)
+        # NEW: Include voice security status in greeting
+        security_status = "enabled" if self.voice_biometrics.enabled else "disabled"
+        full_greeting = f"{greeting} Voice security is {security_status}."
+        self.tts.speak(full_greeting)
     
     def reset_conversation_state(self):
         self.conversation_state = {
@@ -371,6 +378,27 @@ class FridayAssistant:
         # Send immediately without confirmation
         result = self.email_manager.send_email(recipient_email, subject, content)
         return result
+
+    # NEW: Voice Security Training Function
+    def train_voice_profile(self):
+        """Train Friday to recognize your voice"""
+        self.tts.speak("Starting voice training. Please say 'Friday' three times clearly.")
+        
+        voice_samples = []
+        for i in range(3):
+            self.tts.speak(f"Say 'Friday' - {i+1} of 3")
+            audio = self.speech_recognizer.listen_for_command()
+            if audio:
+                # Convert audio for processing
+                raw_audio = audio.get_raw_data(convert_rate=16000, convert_width=2)
+                voice_samples.append(raw_audio)
+        
+        if len(voice_samples) >= 2:
+            self.tts.speak("Voice training completed successfully!")
+            return True
+        else:
+            self.tts.speak("Voice training failed. Please try again.")
+            return False
             
     
     def handle_intent(self, text):
@@ -387,39 +415,56 @@ class FridayAssistant:
                 print("🎯 DEBUG: Routing to _read_emails_interactive")
                 return self._read_emails_interactive()
             
-            elif any(cmd in text for cmd in ["do i have any emails", "any emails", "email notification"]):
-                unread_count = self.email_manager.get_unread_count()
-                if unread_count == 0:
-                    return "Your inbox is clear. No unread emails."
-                elif unread_count == 1:
-                    return f"You have 1 unread email. Say 'check my emails' to read it."
-                else:
-                    return f"You have {unread_count} unread emails. Say 'check my emails' to read them."
+        # NEW: Voice Security Commands
+            if "disable voice lock" in text:
+                self.voice_biometrics.enabled = False
+                return "Voice security disabled. Anyone can activate me now."
+        
+            elif "enable voice lock" in text:
+                self.voice_biometrics.enabled = True  
+                return "Voice security enabled. Only human voices can activate me."
+        
+            elif "voice security status" in text:
+                status = "enabled" if self.voice_biometrics.enabled else "disabled"
+                return f"Voice security is {status}"
+        
+            elif "set voice sensitivity to low" in text:
+                return self.voice_biometrics.set_sensitivity("low")
+        
+            elif "set voice sensitivity to high" in text:
+                return self.voice_biometrics.set_sensitivity("high")
+        
+            elif "set voice sensitivity to medium" in text:
+                return self.voice_biometrics.set_sensitivity("medium")
+        
+            elif "train my voice" in text:
+                success = self.train_voice_profile()
+                return "Voice training completed" if success else "Voice training failed"
 
-            # Email Commands - MORE AGGRESSIVE MATCHING
+        # Email Commands
             elif any(cmd in text for cmd in ["write email to", "compose email to", "create email to"]):
                 return self._handle_email_creation(text)
 
             elif any(cmd in text for cmd in ["send email to", "email to", "mail to"]):
                 return self._handle_email_creation(text)
 
-            # Quick email templates
+        # Quick email templates
             elif any(cmd in text for cmd in ["send meeting email to", "send thank you email to", "send followup to"]):
                 return self._handle_quick_email(text)
 
-            # Fallback - if it has "email" and "to" anywhere in the command
+        # Fallback - if it has "email" and "to" anywhere in the command
             elif "email" in text and " to " in text:
                 return self._handle_email_creation(text)
 
-            # Contact management
+        # Contact management
             elif "list contacts" in text:
                 return self.contact_manager.list_contacts()
-
-            # Shutdown command
+    
+        # Shutdown command
             elif any(cmd in text for cmd in ["shutdown", "power off", "turn off computer"]):
                 return self.system_commands.shutdown_computer(self.tts)
-            
-            # Study Planner commands
+        
+        # Study Planner commands
             elif any(cmd in text for cmd in ["today's study", "study schedule", "what should i study", "today study"]):
                 schedule = self.study_planner.get_todays_study_schedule()
                 return schedule if schedule else "No study plan found. Please create a study plan first by saying 'create study plan'."
@@ -436,26 +481,26 @@ class FridayAssistant:
 
             elif any(cmd in text for cmd in ["create study plan", "make study schedule", "new study plan"]):
                 return self._handle_study_plan_creation(text)
-                
+            
             elif any(phrase in text for phrase in ["clear study plan", "delete study plan", "remove study plan", "erase study plan"]):
                 return self.study_planner.clear_study_plan()
 
-            # Google Search
+        # Google Search
             elif "search" in text or "google" in text:
                 query = self.web_search.extract_search_query(text)
                 return self.web_search.google_search(query)
 
-            # Wikipedia
+        # Wikipedia
             elif "tell me about" in text or "information about" in text or "wikipedia" in text:
                 topic = self.web_search.extract_topic_from_text(text)
                 return self.web_search.wikipedia_search(topic)
 
-            # Weather
+        # Weather
             elif "weather" in text:
                 city = self._extract_city_from_text(text)
                 return self.weather_service.get_weather(city)
 
-            # Reminders
+        # Reminders
             elif "remind me" in text:
                 return self.reminder_manager.add_reminder_from_text(text)
 
@@ -465,70 +510,203 @@ class FridayAssistant:
             elif any(cmd in text for cmd in ["clear reminders", "delete all reminders", "remove all reminders"]):
                 return self.reminder_manager.clear_all_reminders()
 
-            # Memory commands
+        # Memory commands
             elif "list history" in text:
                 return self._handle_list_history(text)
 
             elif "clear history" in text or "delete history" in text:
                 return self._handle_memory_clear_interaction(text)
 
-            # Music
+        # Music
+        # Music
             elif "play playlist" in text or "play all songs" in text:
                 return self.music_player.play_playlist()
-            
+        
             elif text.startswith("play "):
                 song = self.music_player.extract_song_name(text)
                 return self.music_player.play_song(song)
 
-            # Websites
-            website_commands = {
-                "open youtube": "youtube",
-                "open instagram": "instagram", 
-                "open github": "github",
-                "open linkedin": "linkedin",
-                "open chat gpt": "chat gpt",
-                "open gmail": "gmail",
-                "open whatsapp": "whatsapp",
-                "open aums": "aums"
-            }
-            
-            for cmd, site in website_commands.items():
-                if cmd in text:
-                    return self.web_search.open_website(site)
+        # Websites
+            elif any(cmd in text for cmd in ["open youtube", "open instagram", "open github", "open linkedin", "open chat gpt", "open gmail", "open whatsapp", "open aums"]):
+                website_commands = {
+                    "open youtube": "youtube",
+                    "open instagram": "instagram", 
+                    "open github": "github",
+                    "open linkedin": "linkedin",
+                    "open chat gpt": "chat gpt",
+                    "open gmail": "gmail",
+                    "open whatsapp": "whatsapp",
+                    "open aums": "aums"
+                }
+                for cmd,site in website_commands.items():
+                    if cmd in text:
+                        return self.web_search.open_website(site)
 
-                # Date & Time
-                elif "date" in text or "time" in text:
-                    return self.system_commands.get_date_time(text)
+                    # Date & Time
+                    elif "date" in text or "time" in text:
+                        return self.system_commands.get_date_time(text)
 
                 # Greetings
-                elif "how are you" in text:
-                    return "I'm great, thanks for asking!"
-                elif "who are you" in text:
-                    return "I am Friday, your personal AI assistant. I'm here to help you with tasks, searches, and more."
-                elif "what is your name" in text:
-                    return "My name is Friday."
+                    elif "how are you" in text:
+                        return "I'm great, thanks for asking!"
+                    elif "who are you" in text:
+                        return "I am Friday, your personal AI assistant. I'm here to help you with tasks, searches, and more."
+                    elif "what is your name" in text:
+                        return "My name is Friday."
 
                 # Holidays
-                elif "holiday" in text or "important day" in text or "today special" in text:
-                    return self.calendar_service.get_important_days()
+                    elif "holiday" in text or "important day" in text or "today special" in text:
+                        return self.calendar_service.get_important_days()
 
                 # Exit
-                elif "goodbye" in text or "bye" in text:
-                    response = "Goodbye, have a nice day, Friday going offline."
-                    self.tts.speak(response)
-                    sys.exit(0)
+                    elif "goodbye" in text or "bye" in text:
+                        response = "Goodbye, have a nice day, Friday going offline."
+                        self.tts.speak(response)
+                        sys.exit(0)
 
-                # Gemini fallback for everything else
-                else:
-                    response = self.gemini_client.query_gemini(text, self.memory_manager.conversation_history)
-                    if isinstance(response, str) and ("Gemini API error" in response or "did not return" in response):
-                        try:
-                            info = wikipedia.summary(text, sentences=2)
-                            return info
-                        except:
-                            return f"Could not find an answer. You can search online: https://www.google.com/search?q={text}"
-                    return response
-                
+                    # Gemini fallback for everything else             
+                    elif any(cmd in text for cmd in ["do i have any emails", "any emails", "email notification"]):
+                        unread_count = self.email_manager.get_unread_count()
+                        if unread_count == 0:
+                            return "Your inbox is clear. No unread emails."
+                        elif unread_count == 1:
+                            return f"You have 1 unread email. Say 'check my emails' to read it."
+                        else:
+                            return f"You have {unread_count} unread emails. Say 'check my emails' to read them."
+
+                    # Email Commands - MORE AGGRESSIVE MATCHING
+                    elif any(cmd in text for cmd in ["write email to", "compose email to", "create email to"]):
+                        return self._handle_email_creation(text)
+
+                    elif any(cmd in text for cmd in ["send email to", "email to", "mail to"]):
+                        return self._handle_email_creation(text)
+
+                    # Quick email templates
+                    elif any(cmd in text for cmd in ["send meeting email to", "send thank you email to", "send followup to"]):
+                        return self._handle_quick_email(text)
+
+                    # Fallback - if it has "email" and "to" anywhere in the command
+                    elif "email" in text and " to " in text:
+                        return self._handle_email_creation(text)
+
+                    # Contact management
+                    elif "list contacts" in text:
+                        return self.contact_manager.list_contacts()
+
+                    # Shutdown command
+                    elif any(cmd in text for cmd in ["shutdown", "power off", "turn off computer"]):
+                        return self.system_commands.shutdown_computer(self.tts)
+                    
+                    # Study Planner commands
+                    elif any(cmd in text for cmd in ["today's study", "study schedule", "what should i study", "today study"]):
+                        schedule = self.study_planner.get_todays_study_schedule()
+                        return schedule if schedule else "No study plan found. Please create a study plan first by saying 'create study plan'."
+
+                    elif any(cmd in text for cmd in ["show study plan", "view study plan", "display study plan"]):
+                        study_plan = self.study_planner.load_study_plan()
+                        if study_plan:
+                            total_subjects = len(study_plan['subjects'])
+                            total_days = study_plan['total_study_days']
+                            hours_per_day = study_plan['available_hours_per_day']
+                            return f"You have a study plan with {total_subjects} subjects over {total_days} days, studying {hours_per_day} hours daily. Say 'today's study schedule' for details."
+                        else:
+                            return "No study plan found. Say 'create study plan' to make one."
+
+                    elif any(cmd in text for cmd in ["create study plan", "make study schedule", "new study plan"]):
+                        return self._handle_study_plan_creation(text)
+                        
+                    elif any(phrase in text for phrase in ["clear study plan", "delete study plan", "remove study plan", "erase study plan"]):
+                        return self.study_planner.clear_study_plan()
+
+                    # Google Search
+                    elif "search" in text or "google" in text:
+                        query = self.web_search.extract_search_query(text)
+                        return self.web_search.google_search(query)
+
+                    # Wikipedia
+                    elif "tell me about" in text or "information about" in text or "wikipedia" in text:
+                        topic = self.web_search.extract_topic_from_text(text)
+                        return self.web_search.wikipedia_search(topic)
+
+                    # Weather
+                    elif "weather" in text:
+                        city = self._extract_city_from_text(text)
+                        return self.weather_service.get_weather(city)
+
+                    # Reminders
+                    elif "remind me" in text:
+                        return self.reminder_manager.add_reminder_from_text(text)
+
+                    elif any(cmd in text for cmd in ["list reminders", "show reminders", "what reminders"]):
+                        return self.reminder_manager.list_reminders_text()
+
+                    elif any(cmd in text for cmd in ["clear reminders", "delete all reminders", "remove all reminders"]):
+                        return self.reminder_manager.clear_all_reminders()
+
+                    # Memory commands
+                    elif "list history" in text:
+                        return self._handle_list_history(text)
+
+                    elif "clear history" in text or "delete history" in text:
+                        return self._handle_memory_clear_interaction(text)
+
+                    # Music
+                    elif "play playlist" in text or "play all songs" in text:
+                        return self.music_player.play_playlist()
+                    
+                    elif text.startswith("play "):
+                        song = self.music_player.extract_song_name(text)
+                        return self.music_player.play_song(song)
+
+                    # Websites
+                    website_commands = {
+                        "open youtube": "youtube",
+                        "open instagram": "instagram", 
+                        "open github": "github",
+                        "open linkedin": "linkedin",
+                        "open chat gpt": "chat gpt",
+                        "open gmail": "gmail",
+                        "open whatsapp": "whatsapp",
+                        "open aums": "aums"
+                    }
+                    
+                    for cmd, site in website_commands.items():
+                        if cmd in text:
+                            return self.web_search.open_website(site)
+
+                        # Date & Time
+                        elif "date" in text or "time" in text:
+                            return self.system_commands.get_date_time(text)
+
+                        # Greetings
+                        elif "how are you" in text:
+                            return "I'm great, thanks for asking!"
+                        elif "who are you" in text:
+                            return "I am Friday, your personal AI assistant. I'm here to help you with tasks, searches, and more."
+                        elif "what is your name" in text:
+                            return "My name is Friday."
+
+                        # Holidays
+                        elif "holiday" in text or "important day" in text or "today special" in text:
+                            return self.calendar_service.get_important_days()
+
+                        # Exit
+                        elif "goodbye" in text or "bye" in text:
+                            response = "Goodbye, have a nice day, Friday going offline."
+                            self.tts.speak(response)
+                            sys.exit(0)
+
+                        # Gemini fallback for everything else
+                        else:
+                            response = self.gemini_client.query_gemini(text, self.memory_manager.conversation_history)
+                            if isinstance(response, str) and ("Gemini API error" in response or "did not return" in response):
+                                try:
+                                    info = wikipedia.summary(text, sentences=2)
+                                    return info
+                                except:
+                                    return f"Could not find an answer. You can search online: https://www.google.com/search?q={text}"
+                            return response
+                        
         except Exception as e:
             return f"Sorry, I encountered an error: {str(e)}"
 
@@ -704,4 +882,3 @@ class FridayAssistant:
 if __name__ == "__main__":
     assistant = FridayAssistant()
     assistant.run()
-
