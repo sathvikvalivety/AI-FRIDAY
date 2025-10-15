@@ -1,6 +1,9 @@
 # study_planner/study_planner.py
 import json
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import datetime
 import re
 from dateutil import parser

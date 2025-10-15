@@ -1,6 +1,9 @@
 # speech/text_to_speech.py
 import tempfile
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import platform
 import time
 from gtts import gTTS

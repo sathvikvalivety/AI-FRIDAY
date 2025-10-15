@@ -1,5 +1,8 @@
 # config.py
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # API Keys
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
@@ -17,11 +20,14 @@ STUDY_PLAN_FILE = "study_plan.json"
 CONTACTS_FILE = "contacts.json"
 
 # Email Configuration - USING OS ENVIRONMENT VARIABLES
+# config.py - Update EMAIL_CONFIG
 EMAIL_CONFIG = {
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587,
-    'sender_email': os.getenv("SENDER_MAIL"),  # From .bashrc
-    'sender_password': os.getenv("SENDER_PASSWORD")  # From .bashrc
+    'imap_server': 'imap.gmail.com',  # Add this line
+    'imap_port': 993,                 # Add this line
+    'sender_email': os.getenv("SENDER_EMAIL"),
+    'sender_password': os.getenv("SENDER_PASSWORD")
 }
 
 # Other Configuration

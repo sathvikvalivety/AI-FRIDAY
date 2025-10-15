@@ -1,6 +1,9 @@
 # utilities/contact_manager.py
 import json
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import re
 import speech_recognition as sr
 from config import CONTACTS_FILE

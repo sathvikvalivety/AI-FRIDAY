@@ -1,6 +1,9 @@
 # memory/memory_manager.py
 import json
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import datetime
 from config import MEMORY_FILE
 

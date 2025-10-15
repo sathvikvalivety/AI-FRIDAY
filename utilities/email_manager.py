@@ -1,13 +1,18 @@
 # utilities/email_manager.py
 import smtplib
 import os
+# from dotenv import load_dotenv
+# load_dotenv()
+
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config import EMAIL_CONFIG
+from .email_reader import EmailReader  # Add this import
 
 class EmailManager:
     def __init__(self):
         self.config = EMAIL_CONFIG
+        self.reader = EmailReader()  # Make sure this line is present
     
     def send_email(self, recipient, subject, body):
         try:
@@ -61,3 +66,29 @@ class EmailManager:
                 my_name=my_name
             )
         return None
+    
+    # NEW EMAIL READING METHODS
+    def check_inbox(self):
+        """Check for unread emails"""
+        return self.reader.get_unread_emails()
+    
+    def get_unread_count(self):
+        """Get number of unread emails"""
+        return self.reader.get_email_count()
+    
+    def read_email_aloud(self, email_id, tts):
+        """Read a specific email aloud"""
+        email_data = self.reader.read_full_email(email_id)
+        
+        if isinstance(email_data, dict):
+            # Mark as read after reading
+            self.reader.mark_as_read(email_id)
+            
+            # Read email content
+            tts.speak(f"Email from {email_data['from']}")
+            tts.speak(f"Subject: {email_data['subject']}")
+            tts.speak(f"Content: {email_data['body']}")
+            
+            return f"Read email from {email_data['from']}"
+        else:
+            return email_data  # Error message
