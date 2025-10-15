@@ -769,7 +769,10 @@ class FridayAssistant:
                     max_retries=2
                 )
                 
-                if response and 'yes' in response.lower():
+                yes_words = ["yes", "yeah", "yep", "sure", "okay", "ok", "go ahead", "please", "read", "read them"]
+                no_words = ["no", "nope", "nah", "skip", "cancel", "not now"]
+
+                if response and any(word in response.lower() for word in yes_words):
                     # Read full email
                     result = self.email_manager.read_email_aloud(email['id'], self.tts)
                     if "Error" in result:
@@ -834,17 +837,8 @@ class FridayAssistant:
         else:
             return f"You have {unread_count} unread emails. Say 'check my emails' to read them."
 
-    # NEW: Stay in conversation mode for file selection
-    if self.in_file_selection_mode:
-        self.tts.speak("What would you like to do with these files?")
-        follow_up_command = self.speech_recognizer.listen_for_command()
-        if follow_up_command:
-            follow_up_response = self.handle_intent(follow_up_command)
-            if follow_up_response:
-                self.memory_manager.add_to_memory(follow_up_command, follow_up_response)
-                self.tts.speak(follow_up_response)
-        # Exit file selection mode after handling follow-up
-        self.in_file_selection_mode = False
+    # The following block was unreachable and caused a 'self' not defined error.
+    # It has been removed to fix the error.
 
 
 if __name__ == "__main__":
